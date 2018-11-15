@@ -13,6 +13,7 @@ import scala.concurrent.duration.DurationInt
 
 class GatlingSimulation extends Simulation {
   println("LOADING")
+
   def getProperty(value: String, default: String = null): String = {
     System.getProperty(value) match {
       case null => default
@@ -84,21 +85,32 @@ class GatlingSimulation extends Simulation {
     //  -Djavax.net.ssl.keyStorePassword=password123
     builder.withSSL()
   }
-  if(username != null){
+  if (username != null) {
     builder.withCredentials(username, password)
   }
   val cluster = builder.build()
 
-  val session = cluster.connect(getProperty("perf.keyspace", "test"))
+  val ks = getProperty("perf.keyspace", "test")
+
+  val session = cluster.connect()
+
+  session.execute(s"""CREATE KEYSPACE IF NOT EXISTS $ks WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1 }""")
+
+  session.execute(
+    s"""CREATE TABLE IF NOT EXISTS $ks.test  (
+    id text PRIMARY KEY,
+    data text
+  ) """)
 
 
-  val test1 = session.prepare("""INSERT INTO test.test (id, data) VALUES (:id, :data)  """)
+  val insertStatement = session.prepare(s"""INSERT INTO $ks.test (id, data) VALUES (:id, :data)  """)
 
   val random = new util.Random
   val subset: Array[Char] = "0123456789abcdefghijklmnopqrstuvwxyzAZERTYUIOPMLKJHGFDSQWXCVBN".toCharArray
+
   def getRandomStr(length: Int): String = {
     val buf = new Array[Char](length)
-    for (i <- 0 to buf.length -1) {
+    for (i <- 0 to buf.length - 1) {
       val index = random.nextInt(subset.length)
       buf(i) = subset(index)
     }
@@ -107,9 +119,9 @@ class GatlingSimulation extends Simulation {
 
   val sc_1 = scenario("test").repeat(1) {
     feed(Iterator.continually({
-      Map("id"-> getRandomStr(2),
+      Map("id" -> getRandomStr(2),
         "data" -> getRandomStr(2))
-    })).exec(cql("test insert").executeStatement(test1)
+    })).exec(cql("test insert").executeStatement(insertStatement)
       .withSessionParams()
     )
   }
