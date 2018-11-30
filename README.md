@@ -26,3 +26,35 @@ or
 To launch it in IntelliJ:
 
 ![Screenshot](IntelliJ.png?raw=true "screenshot")
+
+
+For this insert query:
+
+`val insertStatement = session.prepare(s"INSERT INTO $ks.test (id, data) VALUES (:id, :data)")`
+
+These feeders will not create tombstone
+```
+Iterator.continually({
+    Map("id" -> getRandomStr(2)) //skip data will not create tombstone
+})
+// or
+val feederWithTombstone = csv("file.csv").random.convert{case (_, string :String) => if(string.isEmpty) null else string}
+val feederWithoutTombstone = feederWithTombstone.copy(
+    records = feederWithTombstone.records.map(row => row.filter { case (key, value) => value != null})
+  )
+//or
+val feeder = csv("file.csv")
+val feederWithoutTombstone = feeder.copy(
+    records = feeder.records.map(row => row.filter { case (key, value :String) => !value.isEmpty})
+)
+```
+
+This feeder will do create tombstone
+```
+Iterator.continually({
+    Map("id" -> getRandomStr(2),
+    "data" -> null) //null will create tombstone
+})
+// or
+val feederWithTombstone = csv("file.csv").random.convert{case (_, string :String) => if(string.isEmpty) null else string}
+```
